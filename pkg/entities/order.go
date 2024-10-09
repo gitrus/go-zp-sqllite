@@ -9,5 +9,5 @@ type Product struct {
 type Order struct {
 	ID         int
 	CustomerID int
-	Product    []Product
+	ProductIDs []int
 }

@@ -2,6 +2,7 @@ package data
 
 import (
 	"database/sql"
+	"fmt"
 
 	e "github.com/Yandex-Practicum/go-db-sql-query-test/pkg/entities"
 )
@@ -14,38 +15,81 @@ func NewOrderDBClient(db *sql.DB) *OrderDBClient {
 	return &OrderDBClient{db: db}
 }
 
-func (cdb *OrderDBClient) Get(id int) (e.Customer, error) {
-	cl := e.Customer{}
+func (cdb *OrderDBClient) Get(id int) (e.Order, error) {
+	var order e.Order
 
-	row := cdb.db.QueryRow("SELECT id, fio, login, birthday, email FROM orders WHERE id = :id", sql.Named("id", id))
-	err := row.Scan(&cl.ID, &cl.FIO, &cl.Login, &cl.Birthday, &cl.Email)
+	row := cdb.db.QueryRow("SELECT id, customer_id FROM orders WHERE id = :id", sql.Named("id", id))
+	err := row.Scan(&order.ID, &order.CustomerID)
 	if err != nil {
-		return cl, err
+		if err == sql.ErrNoRows {
+			return order, fmt.Errorf("order with ID %d not found", id)
+		}
+		return order, err
 	}
 
-	return cl, nil
+	rows, err := cdb.db.Query("SELECT product_id FROM order_products WHERE order_id = :id", sql.Named("id", id))
+	if err != nil {
+		return order, err
+	}
+	defer rows.Close()
+
+	var productID int
+	for rows.Next() {
+		if err := rows.Scan(&productID); err != nil {
+			return order, err
+		}
+		order.ProductIDs = append(order.ProductIDs, productID)
+	}
+
+	if err = rows.Err(); err != nil {
+		return order, err
+	}
+
+	return order, nil
 }
 
-func (cdb *OrderDBClient) Create(client e.Customer) (int, error) {
-	res, err := cdb.db.Exec("INSERT INTO orders (fio, login, birthday, email) VALUES (:fio, :login, :birthday, :email)",
-		sql.Named("fio", client.FIO),
-		sql.Named("login", client.Login),
-		sql.Named("birthday", client.Birthday),
-		sql.Named("email", client.Email))
+func (cdb *OrderDBClient) Create(customerID int, productIDs []int) (int, error) {
+	// Start a transaction
+	tx, err := cdb.db.Begin()
 	if err != nil {
 		return 0, err
 	}
 
-	id, err := res.LastInsertId()
+	// Rollback the transaction on error
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	res, err := tx.Exec(
+		"INSERT INTO orders (customer_id) VALUES (:customerID)",
+		sql.Named("customerID", customerID),
+	)
 	if err != nil {
 		return 0, err
 	}
 
-	return int(id), nil
-}
+	orderID, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
 
-func (cdb *OrderDBClient) Delete(id int) error {
-	_, err := cdb.db.Exec("DELETE FROM orders WHERE id = :id", sql.Named("id", id))
+	for _, productID := range productIDs {
+		_, err = tx.Exec(
+			"INSERT INTO order_products (order_id, product_id) VALUES (:orderID, :productID)",
+			sql.Named("orderID", orderID),
+			sql.Named("productID", productID),
+		)
+		if err != nil {
+			return 0, err
+		}
+	}
 
-	return err
+	// Commit the transaction
+	if err = tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	return int(orderID), nil
 }

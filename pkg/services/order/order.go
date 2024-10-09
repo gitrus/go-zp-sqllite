@@ -7,7 +7,7 @@ import (
 
 type Store interface {
 	Get(id int) (e.Order, error)
-	Create(userId int, products []e.Product) (e.Order, error)
+	Create(customerID int, productIDs []int) (int, error)
 }
 
 type OrderService struct {
