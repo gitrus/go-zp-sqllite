@@ -48,7 +48,7 @@ func (cdb *OrderDBClient) Get(id int) (e.Order, error) {
 	return order, nil
 }
 
-func (cdb *OrderDBClient) Create(customerID int, productIDs []int) (int, error) {
+func (cdb *OrderDBClient) Create(customerID int, productIDs []int, orderTotalAmount int) (int, error) {
 	// Start a transaction
 	tx, err := cdb.db.Begin()
 	if err != nil {
@@ -63,8 +63,9 @@ func (cdb *OrderDBClient) Create(customerID int, productIDs []int) (int, error) 
 	}()
 
 	res, err := tx.Exec(
-		"INSERT INTO orders (customer_id) VALUES (:customerID)",
+		"INSERT INTO orders (customer_id, total_ammount) VALUES (:customerID, :totalAmount)",
 		sql.Named("customerID", customerID),
+		sql.Named("totalAmount", orderTotalAmount),
 	)
 	if err != nil {
 		return 0, err

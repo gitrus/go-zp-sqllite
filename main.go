@@ -2,7 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/Yandex-Practicum/go-db-sql-query-test/pkg/data"
 	"github.com/Yandex-Practicum/go-db-sql-query-test/pkg/services"
@@ -27,13 +29,36 @@ func initServices(db *sql.DB) *services.OrderService {
 }
 
 func main() {
-	db, err := initDB()
+	var db *sql.DB
+	var err error
+	db, err = initDB()
 	if err != nil {
 		return
 	}
+	defer db.Close()
+
+	var orderService *services.OrderService = initServices(db)
+
 	r := chi.NewRouter()
+
 	r.Get("/order/{orderID}", func(w http.ResponseWriter, r *http.Request) {
-		data.OrderDBClient(db.Conn())
+		orderIDStr := chi.URLParam(r, "orderID")
+		orderID, err := strconv.Atoi(orderIDStr)
+		if err != nil {
+			http.Error(w, "Invalid order ID", http.StatusBadRequest)
+			return
+		}
+
+		order, err := orderService.GetByID(orderID)
+		if err != nil {
+			http.Error(w, "Order not found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(order); err != nil {
+			http.Error(w, "Failed to encode order", http.StatusInternalServerError)
+		}
 	})
 	http.ListenAndServe(":3300", r)
 }
