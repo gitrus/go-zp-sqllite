@@ -1,4 +1,4 @@
-package services
+package order
 
 import (
 	e "github.com/Yandex-Practicum/go-db-sql-query-test/pkg/entities"
