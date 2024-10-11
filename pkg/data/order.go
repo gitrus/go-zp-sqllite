@@ -7,25 +7,18 @@ import (
 	e "github.com/Yandex-Practicum/go-db-sql-query-test/pkg/entities"
 )
 
-type DB interface {
-	Exec(query string, args ...interface{}) (sql.Result, error)
-	Query(query string, args ...interface{}) (*sql.Rows, error)
-	QueryRow(query string, args ...interface{}) *sql.Row
-}
-
 type OrderDBClient struct {
-	db DB
+	db *sql.DB
 }
 
-func NewOrderDBClient(db DB) *OrderDBClient {
+func NewOrderDBClient(db *sql.DB) *OrderDBClient {
 	return &OrderDBClient{db: db}
 }
 
 func (cdb *OrderDBClient) Get(id int) (e.Order, error) {
 	var order e.Order
-	order.ProductIDs = []int{}
 
-	row := cdb.db.QueryRow("SELECT order_id, customer_id FROM orders WHERE order_id = :id", sql.Named("id", id))
+	row := cdb.db.QueryRow("SELECT order_id, customer_id FROM orders WHERE order_id = ?", id)
 	err := row.Scan(&order.ID, &order.CustomerID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -34,7 +27,7 @@ func (cdb *OrderDBClient) Get(id int) (e.Order, error) {
 		return order, err
 	}
 
-	rows, err := cdb.db.Query("SELECT product_id FROM order_products WHERE order_id = :id", sql.Named("id", id))
+	rows, err := cdb.db.Query("SELECT product_id FROM order_products WHERE order_id = ?", id)
 	if err != nil {
 		return order, err
 	}
@@ -56,33 +49,25 @@ func (cdb *OrderDBClient) Get(id int) (e.Order, error) {
 }
 
 func (cdb *OrderDBClient) Create(customerID int, productIDs []int, orderTotalAmount int) (int, error) {
-	// Start a transaction
-	var tx *sql.Tx
-	var err error
-
-	switch db := cdb.db.(type) {
-	case *sql.DB:
-		tx, err = db.Begin()
-		if err != nil {
-			return 0, err
-		}
-	case *sql.Tx:
-		tx = db
-	default:
-		return 0, fmt.Errorf("unsupported DB type")
+	tx, err := cdb.db.Begin()
+	if err != nil {
+		return 0, err
 	}
 
-	// Rollback the transaction on error
 	defer func() {
-		if err != nil {
+		if p := recover(); p != nil {
 			tx.Rollback()
+			panic(p)
+		} else if err != nil {
+			tx.Rollback()
+		} else {
+			tx.Commit()
 		}
 	}()
 
 	res, err := tx.Exec(
-		"INSERT INTO orders (customer_id, total_amount) VALUES (:customerID, :totalAmount)",
-		sql.Named("customerID", customerID),
-		sql.Named("totalAmount", orderTotalAmount),
+		"INSERT INTO orders (customer_id, total_amount) VALUES (?, ?)",
+		customerID, orderTotalAmount,
 	)
 	if err != nil {
 		return 0, err
@@ -95,18 +80,12 @@ func (cdb *OrderDBClient) Create(customerID int, productIDs []int, orderTotalAmo
 
 	for _, productID := range productIDs {
 		_, err = tx.Exec(
-			"INSERT INTO order_products (order_id, product_id) VALUES (:orderID, :productID)",
-			sql.Named("orderID", orderID),
-			sql.Named("productID", productID),
+			"INSERT INTO order_products (order_id, product_id) VALUES (?, ?)",
+			orderID, productID,
 		)
 		if err != nil {
 			return 0, err
 		}
-	}
-
-	// Commit the transaction
-	if err = tx.Commit(); err != nil {
-		return 0, err
 	}
 
 	return int(orderID), nil
