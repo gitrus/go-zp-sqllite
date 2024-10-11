@@ -3,9 +3,9 @@ module github.com/Yandex-Practicum/go-db-sql-query-test
 go 1.21
 
 require (
-	github.com/stretchr/testify v1.8.4
-	modernc.org/sqlite v1.27.0
 	github.com/go-chi/chi/v5 v5.1.0
+	github.com/stretchr/testify v1.9.0
+	modernc.org/sqlite v1.27.0
 )
 
 require (

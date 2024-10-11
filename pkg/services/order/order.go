@@ -1,20 +1,50 @@
-package order
+package services
 
 import (
 	e "github.com/Yandex-Practicum/go-db-sql-query-test/pkg/entities"
-	"github.com/Yandex-Practicum/go-db-sql-query-test/pkg/services/customer"
 )
 
-type Store interface {
+type OrderStore interface {
 	Get(id int) (e.Order, error)
-	Create(customerID int, productIDs []int) (int, error)
+	Create(customerID int, productIDs []int, orderTotalAmount int) (int, error)
+}
+
+type ProductFetcher interface {
+	GetMultiple(ids []int) ([]e.Product, error)
 }
 
 type OrderService struct {
-	orderStore    Store
-	customerStore customer.Store
+	orderStore     OrderStore
+	productFetcher ProductFetcher
 }
 
-func NewOrderService(customerStore customer.Store, orderStore Store) *OrderService {
-	return &OrderService{customerStore: customerStore, orderStore: orderStore}
+func NewOrderService(orderStore OrderStore, productFetcher ProductFetcher) *OrderService {
+	return &OrderService{orderStore: orderStore, productFetcher: productFetcher}
+}
+
+func (os *OrderService) GetByID(id int) (e.Order, error) {
+	return os.orderStore.Get(id)
+}
+
+func (os *OrderService) Create(customerID int, productIDs []int) (e.Order, error) {
+	var err error
+	var products []e.Product
+	products, err = os.productFetcher.GetMultiple(productIDs)
+	if err != nil {
+		return e.Order{}, nil
+	}
+
+	var orderTotalAmount int
+	for _, product := range products {
+		orderTotalAmount += product.Price
+	}
+
+	var orderID int
+
+	orderID, err = os.orderStore.Create(customerID, productIDs, orderTotalAmount)
+	if err != nil {
+		return e.Order{}, err
+	}
+
+	return os.GetByID(orderID)
 }

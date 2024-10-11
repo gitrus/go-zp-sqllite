@@ -23,6 +23,7 @@ func initDB() (*sql.DB, error) {
 	return db, db.Ping()
 }
 
+// logic
 func initServices(db *sql.DB) *services.OrderService {
 	var orderStore services.OrderStore = data.NewOrderDBClient(db)
 	return services.NewOrderService(orderStore)

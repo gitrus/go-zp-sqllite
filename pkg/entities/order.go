@@ -7,7 +7,8 @@ type Product struct {
 }
 
 type Order struct {
-	ID         int
-	CustomerID int
-	ProductIDs []int
+	ID          int
+	CustomerID  int
+	TotalAmount int
+	ProductIDs  []int
 }

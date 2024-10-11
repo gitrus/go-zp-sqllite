@@ -7,18 +7,25 @@ import (
 	e "github.com/Yandex-Practicum/go-db-sql-query-test/pkg/entities"
 )
 
-type OrderDBClient struct {
-	db *sql.DB
+type DB interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+	QueryRow(query string, args ...interface{}) *sql.Row
 }
 
-func NewOrderDBClient(db *sql.DB) *OrderDBClient {
+type OrderDBClient struct {
+	db DB
+}
+
+func NewOrderDBClient(db DB) *OrderDBClient {
 	return &OrderDBClient{db: db}
 }
 
 func (cdb *OrderDBClient) Get(id int) (e.Order, error) {
 	var order e.Order
+	order.ProductIDs = []int{}
 
-	row := cdb.db.QueryRow("SELECT id, customer_id FROM orders WHERE id = :id", sql.Named("id", id))
+	row := cdb.db.QueryRow("SELECT order_id, customer_id FROM orders WHERE order_id = :id", sql.Named("id", id))
 	err := row.Scan(&order.ID, &order.CustomerID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -50,9 +57,19 @@ func (cdb *OrderDBClient) Get(id int) (e.Order, error) {
 
 func (cdb *OrderDBClient) Create(customerID int, productIDs []int, orderTotalAmount int) (int, error) {
 	// Start a transaction
-	tx, err := cdb.db.Begin()
-	if err != nil {
-		return 0, err
+	var tx *sql.Tx
+	var err error
+
+	switch db := cdb.db.(type) {
+	case *sql.DB:
+		tx, err = db.Begin()
+		if err != nil {
+			return 0, err
+		}
+	case *sql.Tx:
+		tx = db
+	default:
+		return 0, fmt.Errorf("unsupported DB type")
 	}
 
 	// Rollback the transaction on error
@@ -63,7 +80,7 @@ func (cdb *OrderDBClient) Create(customerID int, productIDs []int, orderTotalAmo
 	}()
 
 	res, err := tx.Exec(
-		"INSERT INTO orders (customer_id, total_ammount) VALUES (:customerID, :totalAmount)",
+		"INSERT INTO orders (customer_id, total_amount) VALUES (:customerID, :totalAmount)",
 		sql.Named("customerID", customerID),
 		sql.Named("totalAmount", orderTotalAmount),
 	)
