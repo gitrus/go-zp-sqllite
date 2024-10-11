@@ -31,20 +31,26 @@ func (os *OrderService) Create(customerID int, productIDs []int) (e.Order, error
 	var products []e.Product
 	products, err = os.productFetcher.GetMultiple(productIDs)
 	if err != nil {
-		return e.Order{}, nil
+		return e.Order{}, err
 	}
 
-	var orderTotalAmount int
-	for _, product := range products {
-		orderTotalAmount += product.Price
-	}
+	var orderTotalAmount int = os.calculateTotalAmount(products)
 
 	var orderID int
-
 	orderID, err = os.orderStore.Create(customerID, productIDs, orderTotalAmount)
 	if err != nil {
 		return e.Order{}, err
 	}
 
 	return os.GetByID(orderID)
+}
+
+func (os *OrderService) calculateTotalAmount(products []e.Product) int {
+	// best way to make your code "readable" is to divide it into well-named functions
+	var totalAmount int
+	for _, product := range products {
+		totalAmount += product.Price
+	}
+
+	return totalAmount
 }
